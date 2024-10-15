@@ -1,8 +1,15 @@
 {
-  "name": "nodejs-express",
+  "name": "bun-websocket-server",
   "version": "0.0.0",
+  "type": "module",
   "private": true,
-  "dependencies": {
-    "express": "^4.19.2"
+  "scripts": {
+    "dev": "bun --watch ./src/index.ts",
+    "start": "bun ./src/index.ts"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.12",
+    "bun": "1.1.30",
+    "@types/bun": "^1.1.11"
   }
 }
