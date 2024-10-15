@@ -32,7 +32,7 @@ resources:
           - start
         port: 3000
       functionName: ${vars.functionName}
-      code: ./src
+      code: .
       triggers:
         - triggerName: httpTrigger
           triggerType: http
