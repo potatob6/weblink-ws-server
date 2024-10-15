@@ -7,9 +7,11 @@
     "dev": "npx bun --watch ./src/index.ts",
     "start": "npx bun ./src/index.ts"
   },
+  "dependencies": {
+    "bun": "1.1.30"
+  },
   "devDependencies": {
     "@types/ws": "^8.5.12",
-    "bun": "1.1.30",
     "@types/bun": "^1.1.11"
   }
 }
