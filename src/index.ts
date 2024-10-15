@@ -102,6 +102,7 @@ const server = Bun.serve<ServerWebSocketData>({
 
       room.sessions.delete(client.clientId);
       room.clients.delete(client.clientId);
+      room.lastPongTimes.delete(client.clientId);
 
       ws.data.clientId = null;
 
@@ -164,6 +165,7 @@ function handleLeave(room: Room, client: TransferClient, ws: ServerWebSocket<Ser
   if (!room) return;
   room.sessions.delete(client.clientId);
   room.clients.delete(client.clientId);
+  room.lastPongTimes.delete(client.clientId);
   console.log(`client ${client.clientId} left`);
   room.sessions.forEach((clientWs) => {
     if (clientWs.readyState === WebSocket.OPEN) {
