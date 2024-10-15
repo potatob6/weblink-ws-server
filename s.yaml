@@ -1,11 +1,11 @@
 edition: 3.0.0
-name: express-app
+name: webrtc-ws-signaling-server
 access: "undefined"
 vars:
   region: "cn-hangzhou"
   functionName: "webrtc-signaling-function"
 resources:
-  start_express:
+  start_server:
     component: fc3
     actions:
       pre-deploy:
@@ -13,7 +13,7 @@ resources:
           path: .
     props:
       region: ${vars.region}
-      description: Serverless Devs Web Framework Function
+      description: Serverless Devs WebRTC Signaling Server
       runtime: custom.debian10
       timeout: 60
       cpu: 1
