@@ -4,8 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun --watch ./src/index.ts",
-    "start": "bun ./src/index.ts"
+    "dev": "npx bun --watch ./src/index.ts",
+    "start": "npx bun ./src/index.ts"
   },
   "devDependencies": {
     "@types/ws": "^8.5.12",
