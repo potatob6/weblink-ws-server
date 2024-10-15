@@ -1,8 +1,3 @@
-# ------------------------------------
-#   官方手册: https://manual.serverless-devs.com/user-guide/aliyun/#fc3
-#   有问题快来钉钉群问一下吧：33947367
-# ------------------------------------
-
 edition: 3.0.0
 name: express-app
 access: "undefined"
@@ -36,7 +31,7 @@ resources:
           - ./index.js
         port: 9000
       functionName: ${vars.functionName}
-      code: ./code
+      code: ./src
       triggers:
         - triggerName: httpTrigger
           triggerType: http
