@@ -17,6 +17,7 @@ interface Room {
   clients: Map<ClientID, TransferClient>;
   sessions: Map<ClientID, ServerWebSocket<ServerWebSocketData>>;
   passwordHash: string | null;
+  lastPongTimes: Map<ClientID, number>; // 新增：记录最后一次 pong 的时间
 }
 
 const rooms: Map<string, Room> = new Map();
@@ -26,6 +27,7 @@ const server = Bun.serve<ServerWebSocketData>({
   fetch(req, server) {
     const url = new URL(req.url);
     const roomId = url.searchParams.get("room") || "";
+
     const passwordHash = url.searchParams.get("pwd") || "";
     server.upgrade(req, {
       data: { roomId, passwordHash, clientId: null },
@@ -42,6 +44,7 @@ const server = Bun.serve<ServerWebSocketData>({
           clients: new Map(),
           sessions: new Map(),
           passwordHash: passwordHash || null,
+          lastPongTimes: new Map(), // 新增：初始化 lastPongTimes
         };
         rooms.set(roomId, room);
         logger.info({ roomId }, "Room created");
@@ -60,6 +63,12 @@ const server = Bun.serve<ServerWebSocketData>({
 
       if (!room) {
         logger.warn({ roomId: ws.data.roomId }, "Room not found");
+        return;
+      }
+
+      // 新增：处理 pong 消息
+      if (signal.type === "pong") {
+        room.lastPongTimes.set(ws.data.clientId || "", Date.now());
         return;
       }
 
@@ -122,7 +131,8 @@ function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<Serv
   if (!room) return;
   if (room.clients.has(client.clientId)) return;
   if (room.sessions.has(client.clientId)) return;
-
+  // 新增：设置初始 pong 时间
+  room.lastPongTimes.set(client.clientId, Date.now());
   console.log(`client ${client.clientId} joined`);
   ws.data.clientId = client.clientId;
   room.clients.forEach((existingClient) => {
@@ -182,7 +192,34 @@ function handleMessage(room: Room, data: ClientSignal, ws: ServerWebSocket<Serve
   }
 }
 
+// 新增：心跳检测函数
+function startHeartbeat() {
+  const HEARTBEAT_INTERVAL = 30000; // 30 秒发送一次心跳
+  const PONG_TIMEOUT = 60000; // 60 秒内没有 pong 则断开连接
+
+  setInterval(() => {
+    const now = Date.now();
+    rooms.forEach((room, roomId) => {
+      room.sessions.forEach((ws, clientId) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          const lastPongTime = room.lastPongTimes.get(clientId);
+          if (!lastPongTime) {
+            return;
+          }
+          if (now - lastPongTime > PONG_TIMEOUT) {
+            logger.warn({ clientId, roomId }, "Client timed out, closing connection");
+            ws.close();
+          } else {
+            ws.send(JSON.stringify({ type: "ping" }));
+          }
+        }
+      });
+    });
+  }, HEARTBEAT_INTERVAL);
+}
+
 logger.info({ port: server.port }, "WebSocket server started");
+startHeartbeat(); // 启动心跳检测
 
 // 优雅关闭
 process.on("SIGINT", () => {
