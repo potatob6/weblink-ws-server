@@ -1,12 +1,17 @@
 import type { ServerWebSocket } from "bun";
-import type {
-  ClientID,
-  ClientSignal,
-  RawSignal,
-  TransferClient,
-} from "./types";
+import type { ClientID, ClientSignal, RawSignal, TransferClient } from "./types";
+import pino from "pino";
 
-type ServerWebSocketData = { roomId: string; passwordHash: string; clientId: ClientID | null }
+// 根据环境变量设置日志级别，默认为 'info'
+const LOG_LEVEL = process.env["LOG_LEVEL"] || "info";
+
+const logger = pino({
+  level: LOG_LEVEL,
+  timestamp: pino.stdTimeFunctions.isoTime,
+  base: { pid: process.pid },
+});
+
+type ServerWebSocketData = { roomId: string; passwordHash: string; clientId: ClientID | null };
 
 interface Room {
   clients: Map<ClientID, TransferClient>;
@@ -24,12 +29,12 @@ const server = Bun.serve<ServerWebSocketData>({
     const passwordHash = url.searchParams.get("pwd") || "";
     server.upgrade(req, {
       data: { roomId, passwordHash, clientId: null },
-    })
+    });
   },
   websocket: {
     open(ws) {
       const { roomId, passwordHash } = ws.data;
-      console.log(`new connection: ${roomId} ${passwordHash}`);
+      logger.info({ remoteAddress: ws.remoteAddress, roomId }, "New connection");
 
       let room: Room | undefined = rooms.get(roomId);
       if (!room) {
@@ -39,7 +44,7 @@ const server = Bun.serve<ServerWebSocketData>({
           passwordHash: passwordHash || null,
         };
         rooms.set(roomId, room);
-        console.log("room created");
+        logger.info({ roomId }, "Room created");
       }
 
       ws.send(
@@ -54,7 +59,7 @@ const server = Bun.serve<ServerWebSocketData>({
       const room: Room | undefined = rooms.get(ws.data.roomId);
 
       if (!room) {
-        console.log("room not found");
+        logger.warn({ roomId: ws.data.roomId }, "Room not found");
         return;
       }
 
@@ -76,13 +81,13 @@ const server = Bun.serve<ServerWebSocketData>({
     close(ws) {
       const room: Room | undefined = rooms.get(ws.data.roomId);
       if (!room) {
-        console.log("room not found");
+        logger.warn({ roomId: ws.data.roomId }, "Client not found");
         return;
       }
 
       const client: TransferClient | undefined = room.clients.get(ws.data.clientId || "");
       if (!client) {
-        console.log("client not found");
+        logger.warn({ roomId: ws.data.roomId }, "Client not found");
         return;
       }
 
@@ -97,14 +102,17 @@ const server = Bun.serve<ServerWebSocketData>({
       };
       room.sessions.forEach((clientWs) => {
         if (clientWs.readyState === WebSocket.OPEN) {
-          console.log(`send leave message to ${client.clientId}`);
+          logger.debug(
+            { clientId: client.clientId, roomId: ws.data.roomId },
+            "Sending leave message"
+          );
           clientWs.send(JSON.stringify(leaveMessage));
         }
       });
 
       if (room.sessions.size === 0) {
         rooms.delete(ws.data.roomId);
-        console.log("room deleted");
+        logger.info({ roomId: ws.data.roomId }, "Room deleted");
       }
     },
   },
@@ -114,7 +122,6 @@ function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<Serv
   if (!room) return;
   if (room.clients.has(client.clientId)) return;
   if (room.sessions.has(client.clientId)) return;
-
 
   console.log(`client ${client.clientId} joined`);
   ws.data.clientId = client.clientId;
@@ -175,4 +182,12 @@ function handleMessage(room: Room, data: ClientSignal, ws: ServerWebSocket<Serve
   }
 }
 
-console.log(`WebSocket server running on port ${server.port}`);
+logger.info({ port: server.port }, "WebSocket server started");
+
+// 优雅关闭
+process.on("SIGINT", () => {
+  logger.info("Shutting down server...");
+  server.stop();
+  logger.info("Server closed");
+  process.exit(0);
+});

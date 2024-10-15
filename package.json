@@ -1,5 +1,5 @@
 {
-  "name": "bun-websocket-server",
+  "name": "wbelink-ws-server",
   "version": "0.0.0",
   "type": "module",
   "private": true,
@@ -8,10 +8,11 @@
     "start": "npx bun ./src/index.ts"
   },
   "dependencies": {
-    "bun": "1.1.30"
+    "bun": "1.1.30",
+    "pino": "^9.5.0"
   },
   "devDependencies": {
-    "@types/ws": "^8.5.12",
-    "@types/bun": "^1.1.11"
+    "@types/bun": "^1.1.11",
+    "@types/ws": "^8.5.12"
   }
 }
