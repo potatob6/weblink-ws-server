@@ -63,10 +63,10 @@ const server = Bun.serve<ServerWebSocketData>({
           handleJoin(room, signal.data as TransferClient, ws);
           break;
         case "leave":
-          handleLeave(room, signal.data as TransferClient);
+          handleLeave(room, signal.data as TransferClient, ws);
           break;
         case "message":
-          handleMessage(room, signal.data as ClientSignal);
+          handleMessage(room, signal.data as ClientSignal, ws);
           break;
         default:
           console.log("unknown signal type");
@@ -112,10 +112,13 @@ const server = Bun.serve<ServerWebSocketData>({
 
 function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<ServerWebSocketData>) {
   if (!room) return;
+  if (room.clients.has(client.clientId)) return;
+  if (room.sessions.has(client.clientId)) return;
+
+
   console.log(`client ${client.clientId} joined`);
   ws.data.clientId = client.clientId;
   room.clients.forEach((existingClient) => {
-    console.log(existingClient);
     ws.send(
       JSON.stringify({
         type: "join",
@@ -140,7 +143,7 @@ function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<Serv
   room.clients.set(client.clientId, client);
 }
 
-function handleLeave(room: Room, client: TransferClient) {
+function handleLeave(room: Room, client: TransferClient, ws: ServerWebSocket<ServerWebSocketData>) {
   if (!room) return;
   room.sessions.delete(client.clientId);
   room.clients.delete(client.clientId);
@@ -156,11 +159,12 @@ function handleLeave(room: Room, client: TransferClient) {
       );
     }
   });
+  ws.close();
 }
 
-function handleMessage(room: Room, data: ClientSignal) {
+function handleMessage(room: Room, data: ClientSignal, ws: ServerWebSocket<ServerWebSocketData>) {
   const targetWs = room?.sessions.get(data.targetClientId);
-  if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+  if (targetWs && targetWs !== ws && targetWs.readyState === WebSocket.OPEN) {
     console.log(`send message to ${data.targetClientId}`);
     targetWs.send(
       JSON.stringify({
