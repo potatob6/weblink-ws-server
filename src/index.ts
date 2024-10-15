@@ -13,11 +13,15 @@ const logger = pino({
 
 type ServerWebSocketData = { roomId: string; passwordHash: string; clientId: ClientID | null };
 
+interface ClientData {
+  client: TransferClient;
+  session: ServerWebSocket<ServerWebSocketData>;
+  lastPongTime: number;
+}
+
 interface Room {
-  clients: Map<ClientID, TransferClient>;
-  sessions: Map<ClientID, ServerWebSocket<ServerWebSocketData>>;
+  clients: Map<ClientID, ClientData>;
   passwordHash: string | null;
-  lastPongTimes: Map<ClientID, number>; // 新增：记录最后一次 pong 的时间
 }
 
 const rooms: Map<string, Room> = new Map();
@@ -42,9 +46,7 @@ const server = Bun.serve<ServerWebSocketData>({
       if (!room) {
         room = {
           clients: new Map(),
-          sessions: new Map(),
           passwordHash: passwordHash || null,
-          lastPongTimes: new Map(), // 新增：初始化 lastPongTimes
         };
         rooms.set(roomId, room);
         logger.info({ roomId }, "Room created");
@@ -58,33 +60,40 @@ const server = Bun.serve<ServerWebSocketData>({
       );
     },
     message(ws, message) {
-      const signal: RawSignal = JSON.parse(message.toString());
-      const room: Room | undefined = rooms.get(ws.data.roomId);
+      try {
+        const signal: RawSignal = JSON.parse(message.toString());
+        const room: Room | undefined = rooms.get(ws.data.roomId);
 
-      if (!room) {
-        logger.warn({ roomId: ws.data.roomId }, "Room not found");
-        return;
-      }
+        if (!room) {
+          logger.warn({ roomId: ws.data.roomId }, "Room not found");
+          return;
+        }
 
-      // 新增：处理 pong 消息
-      if (signal.type === "pong") {
-        room.lastPongTimes.set(ws.data.clientId || "", Date.now());
-        return;
-      }
+        // 新增：处理 pong 消息
+        if (signal.type === "pong") {
+          const clientData = room.clients.get(ws.data.clientId || "");
+          if (clientData) {
+            clientData.lastPongTime = Date.now();
+          }
+          return;
+        }
 
-      switch (signal.type) {
-        case "join":
-          handleJoin(room, signal.data as TransferClient, ws);
-          break;
-        case "leave":
-          handleLeave(room, signal.data as TransferClient, ws);
-          break;
-        case "message":
-          handleMessage(room, signal.data as ClientSignal, ws);
-          break;
-        default:
-          console.log("unknown signal type");
-          break;
+        switch (signal.type) {
+          case "join":
+            handleJoin(room, signal.data as TransferClient, ws);
+            break;
+          case "leave":
+            handleLeave(room, signal.data as TransferClient, ws);
+            break;
+          case "message":
+            handleMessage(room, signal.data as ClientSignal, ws);
+            break;
+          default:
+            console.log("unknown signal type");
+            break;
+        }
+      } catch (error) {
+        logger.error({ error }, "Error processing message");
       }
     },
     close(ws) {
@@ -94,36 +103,26 @@ const server = Bun.serve<ServerWebSocketData>({
         return;
       }
 
-      const client: TransferClient | undefined = room.clients.get(ws.data.clientId || "");
-      if (!client) {
+      const clientData = room.clients.get(ws.data.clientId || "");
+      if (!clientData) {
         logger.warn({ roomId: ws.data.roomId }, "Client not found");
         return;
       }
 
-      room.sessions.delete(client.clientId);
-      room.clients.delete(client.clientId);
-      room.lastPongTimes.delete(client.clientId);
+      room.clients.delete(clientData.client.clientId);
 
-      ws.data.clientId = null;
-
-      const leaveMessage: RawSignal = {
-        type: "leave",
-        data: client,
-      };
-      room.sessions.forEach((clientWs) => {
-        if (clientWs.readyState === WebSocket.OPEN) {
-          logger.debug(
-            { clientId: client.clientId, roomId: ws.data.roomId },
-            "Sending leave message"
+      room.clients.forEach((clientData, clientId) => {
+        if (clientData.session !== ws && clientData.session.readyState === WebSocket.OPEN) {
+          logger.info({ clientId }, `send leave message`);
+          clientData.session.send(
+            JSON.stringify({
+              type: "leave",
+              data: clientData.client,
+            })
           );
-          clientWs.send(JSON.stringify(leaveMessage));
         }
       });
-
-      if (room.sessions.size === 0) {
-        rooms.delete(ws.data.roomId);
-        logger.info({ roomId: ws.data.roomId }, "Room deleted");
-      }
+      ws.close();
     },
   },
 });
@@ -131,24 +130,20 @@ const server = Bun.serve<ServerWebSocketData>({
 function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<ServerWebSocketData>) {
   if (!room) return;
   if (room.clients.has(client.clientId)) return;
-  if (room.sessions.has(client.clientId)) return;
-  // 新增：设置初始 pong 时间
-  room.lastPongTimes.set(client.clientId, Date.now());
-  console.log(`client ${client.clientId} joined`);
   ws.data.clientId = client.clientId;
-  room.clients.forEach((existingClient) => {
+  room.clients.forEach((clientData) => {
     ws.send(
       JSON.stringify({
         type: "join",
-        data: existingClient,
+        data: clientData.client,
       })
     );
   });
 
-  room.sessions.forEach((clientWs) => {
-    if (clientWs !== ws && clientWs.readyState === WebSocket.OPEN) {
+  room.clients.forEach((clientData) => {
+    if (clientData.session !== ws && clientData.session.readyState === WebSocket.OPEN) {
       console.log(`send join message to ${client.clientId}`);
-      clientWs.send(
+      clientData.session.send(
         JSON.stringify({
           type: "join",
           data: client,
@@ -157,20 +152,21 @@ function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<Serv
     }
   });
 
-  room.sessions.set(client.clientId, ws);
-  room.clients.set(client.clientId, client);
+  room.clients.set(client.clientId, {
+    client,
+    session: ws,
+    lastPongTime: Date.now(),
+  });
 }
 
 function handleLeave(room: Room, client: TransferClient, ws: ServerWebSocket<ServerWebSocketData>) {
   if (!room) return;
-  room.sessions.delete(client.clientId);
   room.clients.delete(client.clientId);
-  room.lastPongTimes.delete(client.clientId);
   console.log(`client ${client.clientId} left`);
-  room.sessions.forEach((clientWs) => {
-    if (clientWs.readyState === WebSocket.OPEN) {
+  room.clients.forEach((clientData) => {
+    if (clientData.session.readyState === WebSocket.OPEN) {
       console.log(`send leave message to ${client.clientId}`);
-      clientWs.send(
+      clientData.session.send(
         JSON.stringify({
           type: "leave",
           data: client,
@@ -182,10 +178,14 @@ function handleLeave(room: Room, client: TransferClient, ws: ServerWebSocket<Ser
 }
 
 function handleMessage(room: Room, data: ClientSignal, ws: ServerWebSocket<ServerWebSocketData>) {
-  const targetWs = room?.sessions.get(data.targetClientId);
-  if (targetWs && targetWs !== ws && targetWs.readyState === WebSocket.OPEN) {
+  const targetClientData = room?.clients.get(data.targetClientId);
+  if (
+    targetClientData &&
+    targetClientData.session !== ws &&
+    targetClientData.session.readyState === WebSocket.OPEN
+  ) {
     console.log(`send message to ${data.targetClientId}`);
-    targetWs.send(
+    targetClientData.session.send(
       JSON.stringify({
         type: "message",
         data: data,
@@ -194,25 +194,20 @@ function handleMessage(room: Room, data: ClientSignal, ws: ServerWebSocket<Serve
   }
 }
 
-// 新增：心跳检测函数
 function startHeartbeat() {
-  const HEARTBEAT_INTERVAL = 30000; // 30 秒发送一次心跳
-  const PONG_TIMEOUT = 60000; // 60 秒内没有 pong 则断开连接
+  const HEARTBEAT_INTERVAL = 10000;
+  const PONG_TIMEOUT = 30000;
 
   setInterval(() => {
     const now = Date.now();
     rooms.forEach((room, roomId) => {
-      room.sessions.forEach((ws, clientId) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          const lastPongTime = room.lastPongTimes.get(clientId);
-          if (!lastPongTime) {
-            return;
-          }
-          if (now - lastPongTime > PONG_TIMEOUT) {
+      room.clients.forEach((clientData, clientId) => {
+        if (clientData.session.readyState === WebSocket.OPEN) {
+          if (now - clientData.lastPongTime > PONG_TIMEOUT) {
             logger.warn({ clientId, roomId }, "Client timed out, closing connection");
-            ws.close();
+            clientData.session.close();
           } else {
-            ws.send(JSON.stringify({ type: "ping" }));
+            clientData.session.send(JSON.stringify({ type: "ping" }));
           }
         }
       });
