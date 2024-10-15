@@ -10,7 +10,7 @@ resources:
     actions:
       pre-deploy:
         - run: export PATH=/usr/local/versions/node/v20.8.1/bin:$PATH && npm install --production
-          path: ./code
+          path: ./src
     props:
       region: ${vars.region}
       description: Serverless Devs Web Framework Function
