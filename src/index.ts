@@ -131,7 +131,7 @@ function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<Serv
     existingClient.lastPongTime = Date.now();
     logger.info({ clientId: client.clientId, name: client.name }, "Client reconnected");
 
-    // 发送缓存的消息
+    // send cached messages
     existingClient.messageCache.forEach((message) => {
       ws.send(JSON.stringify(message));
     });
@@ -140,6 +140,7 @@ function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<Serv
     return;
   }
 
+  // send join message to new client
   room.clients.forEach((clientData) => {
     ws.send(
       JSON.stringify({
@@ -149,18 +150,21 @@ function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<Serv
     );
   });
 
+  // send join message to other clients
   room.clients.forEach((clientData) => {
-    if (clientData.session !== ws && clientData.session.readyState === WebSocket.OPEN) {
-      clientData.session.send(
-        JSON.stringify({
-          type: "join",
-          data: client,
-        })
-      );
+    if (clientData.session === ws) return;
+    const joinMessage: RawSignal = {
+      type: "join",
+      data: client,
+    };
+    if (clientData.session.readyState === WebSocket.OPEN) {
+      clientData.session.send(JSON.stringify(joinMessage));
       logger.info(
         { clientId: clientData.client.clientId, name: clientData.client.name },
         "send join message to client"
       );
+    } else {
+      clientData.messageCache.push(joinMessage);
     }
   });
 
@@ -233,30 +237,7 @@ function handleClose(ws: ServerWebSocket<ServerWebSocketData>) {
 
   // set disconnect timeout
   clientData.disconnectTimeout = setTimeout(() => {
-    room.clients.delete(clientData.client.clientId);
-    logger.info(
-      { name: clientData.client.name, clientId: clientData.client.clientId },
-      "Client disconnected"
-    );
-
-    room.clients.forEach((targetClientData, clientId) => {
-      const leaveMessage = {
-        type: "leave",
-        data: clientData.client,
-      };
-
-      if (targetClientData.session.readyState === WebSocket.OPEN) {
-        targetClientData.session.send(JSON.stringify(leaveMessage));
-        logger.info({ clientId, name: targetClientData.client.name }, `send leave message`);
-      } else {
-        targetClientData.messageCache.push(leaveMessage);
-      }
-    });
-
-    if (room.clients.size === 0) {
-      rooms.delete(ws.data.roomId);
-      logger.info({ roomId: ws.data.roomId }, "Room deleted");
-    }
+    handleLeave(room, clientData.client, clientData.session);
   }, DISCONNECT_TIMEOUT);
 }
 
