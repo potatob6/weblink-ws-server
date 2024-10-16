@@ -15,7 +15,7 @@ resources:
       region: ${vars.region}
       description: Serverless Devs WebRTC Signaling Server
       runtime: custom.debian10
-      timeout: 60
+      timeout: 3600
       cpu: 1
       memorySize: 2048
       diskSize: 512
