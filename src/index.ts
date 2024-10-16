@@ -1,10 +1,5 @@
 import type { ServerWebSocket } from "bun";
-import type {
-  ClientID,
-  ClientSignal,
-  RawSignal,
-  TransferClient,
-} from "./types";
+import type { ClientID, ClientSignal, RawSignal, TransferClient } from "./types";
 import pino from "pino";
 
 const LOG_LEVEL = process.env["LOG_LEVEL"] || "info";
@@ -54,10 +49,7 @@ const server = Bun.serve<ServerWebSocketData>({
   websocket: {
     open(ws) {
       const { roomId, passwordHash } = ws.data;
-      logger.info(
-        { remoteAddress: ws.remoteAddress, roomId },
-        "New connection"
-      );
+      logger.info({ remoteAddress: ws.remoteAddress, roomId }, "New connection");
 
       let room: Room | undefined = rooms.get(roomId);
       if (!room) {
@@ -102,7 +94,7 @@ const server = Bun.serve<ServerWebSocketData>({
             handleMessage(room, signal.data as ClientSignal, ws);
             break;
           default:
-            console.log("unknown signal type");
+            logger.warn({ signal }, "Unknown signal type");
             break;
         }
       } catch (error) {
@@ -139,10 +131,7 @@ const server = Bun.serve<ServerWebSocketData>({
               data: clientData.client,
             })
           );
-          logger.info(
-            { clientId, name: targetClientData.client.name },
-            `send leave message`
-          );
+          logger.info({ clientId, name: targetClientData.client.name }, `send leave message`);
         }
       });
 
@@ -154,11 +143,7 @@ const server = Bun.serve<ServerWebSocketData>({
   },
 });
 
-function handleJoin(
-  room: Room,
-  client: TransferClient,
-  ws: ServerWebSocket<ServerWebSocketData>
-) {
+function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<ServerWebSocketData>) {
   if (!room) return;
   if (room.clients.has(client.clientId)) return;
   ws.data.clientId = client.clientId;
@@ -172,16 +157,16 @@ function handleJoin(
   });
 
   room.clients.forEach((clientData) => {
-    if (
-      clientData.session !== ws &&
-      clientData.session.readyState === WebSocket.OPEN
-    ) {
-      console.log(`send join message to ${client.clientId}`);
+    if (clientData.session !== ws && clientData.session.readyState === WebSocket.OPEN) {
       clientData.session.send(
         JSON.stringify({
           type: "join",
           data: client,
         })
+      );
+      logger.info(
+        { clientId: clientData.client.clientId, name: clientData.client.name },
+        "send join message to client"
       );
     }
   });
@@ -193,11 +178,7 @@ function handleJoin(
   });
 }
 
-function handleMessage(
-  room: Room,
-  data: ClientSignal,
-  ws: ServerWebSocket<ServerWebSocketData>
-) {
+function handleMessage(room: Room, data: ClientSignal, ws: ServerWebSocket<ServerWebSocketData>) {
   const targetClientData = room?.clients.get(data.targetClientId);
   const clientData = room?.clients.get(ws.data.clientId || "");
   if (!clientData) {
@@ -228,9 +209,7 @@ function handleMessage(
 }
 
 function startHeartbeat() {
-  const HEARTBEAT_INTERVAL = parseInt(
-    process.env["HEARTBEAT_INTERVAL"] || "10000"
-  );
+  const HEARTBEAT_INTERVAL = parseInt(process.env["HEARTBEAT_INTERVAL"] || "10000");
   const PONG_TIMEOUT = parseInt(process.env["PONG_TIMEOUT"] || "30000");
 
   setInterval(() => {
@@ -239,10 +218,7 @@ function startHeartbeat() {
       room.clients.forEach((clientData, clientId) => {
         if (clientData.session.readyState === WebSocket.OPEN) {
           if (now - clientData.lastPongTime > PONG_TIMEOUT) {
-            logger.warn(
-              { clientId, roomId },
-              "Client timed out, closing connection"
-            );
+            logger.warn({ clientId, roomId }, "Client timed out, closing connection");
             clientData.session.close();
           } else {
             clientData.session.send(JSON.stringify({ type: "ping" }));
