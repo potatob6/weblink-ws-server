@@ -112,9 +112,15 @@ const server = Bun.serve<ServerWebSocketData>({
 });
 
 function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<ServerWebSocketData>) {
-  if (!room) return;
+  if (!room) {
+    logger.warn({ roomId: ws.data.roomId }, "Room not found");
+    return;
+  }
 
   const existingClient = room.clients.get(client.clientId);
+
+  ws.data.clientId = client.clientId;
+
   if (existingClient) {
     // 如果客户端存在且有断开等待超时,取消超时并更新会话
     if (existingClient.disconnectTimeout) {
@@ -127,8 +133,6 @@ function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<Serv
     return;
   }
 
-  if (!room.clients.has(client.clientId)) return;
-  ws.data.clientId = client.clientId;
   room.clients.forEach((clientData) => {
     ws.send(
       JSON.stringify({
