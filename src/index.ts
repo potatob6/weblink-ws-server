@@ -1,8 +1,12 @@
 import type { ServerWebSocket } from "bun";
-import type { ClientID, ClientSignal, RawSignal, TransferClient } from "./types";
+import type {
+  ClientID,
+  ClientSignal,
+  RawSignal,
+  TransferClient,
+} from "./types";
 import pino from "pino";
 
-// 根据环境变量设置日志级别，默认为 'info'
 const LOG_LEVEL = process.env["LOG_LEVEL"] || "info";
 
 const logger = pino({
@@ -11,7 +15,11 @@ const logger = pino({
   base: { pid: process.pid },
 });
 
-type ServerWebSocketData = { roomId: string; passwordHash: string; clientId: ClientID | null };
+type ServerWebSocketData = {
+  roomId: string;
+  passwordHash: string;
+  clientId: ClientID | null;
+};
 
 interface ClientData {
   client: TransferClient;
@@ -31,16 +39,23 @@ const server = Bun.serve<ServerWebSocketData>({
   fetch(req, server) {
     const url = new URL(req.url);
     const roomId = url.searchParams.get("room") || "";
-
     const passwordHash = url.searchParams.get("pwd") || "";
-    server.upgrade(req, {
+
+    if (server.upgrade(req, {
       data: { roomId, passwordHash, clientId: null },
-    });
+    })) {
+      return;
+    }
+
+    return new Response(undefined, { status: 404 });
   },
   websocket: {
     open(ws) {
       const { roomId, passwordHash } = ws.data;
-      logger.info({ remoteAddress: ws.remoteAddress, roomId }, "New connection");
+      logger.info(
+        { remoteAddress: ws.remoteAddress, roomId },
+        "New connection"
+      );
 
       let room: Room | undefined = rooms.get(roomId);
       if (!room) {
@@ -69,7 +84,6 @@ const server = Bun.serve<ServerWebSocketData>({
           return;
         }
 
-        // 新增：处理 pong 消息
         if (signal.type === "pong") {
           const clientData = room.clients.get(ws.data.clientId || "");
           if (clientData) {
@@ -112,7 +126,10 @@ const server = Bun.serve<ServerWebSocketData>({
       room.clients.delete(clientData.client.clientId);
 
       room.clients.forEach((clientData, clientId) => {
-        if (clientData.session !== ws && clientData.session.readyState === WebSocket.OPEN) {
+        if (
+          clientData.session !== ws &&
+          clientData.session.readyState === WebSocket.OPEN
+        ) {
           logger.info({ clientId }, `send leave message`);
           clientData.session.send(
             JSON.stringify({
@@ -127,7 +144,11 @@ const server = Bun.serve<ServerWebSocketData>({
   },
 });
 
-function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<ServerWebSocketData>) {
+function handleJoin(
+  room: Room,
+  client: TransferClient,
+  ws: ServerWebSocket<ServerWebSocketData>
+) {
   if (!room) return;
   if (room.clients.has(client.clientId)) return;
   ws.data.clientId = client.clientId;
@@ -141,7 +162,10 @@ function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<Serv
   });
 
   room.clients.forEach((clientData) => {
-    if (clientData.session !== ws && clientData.session.readyState === WebSocket.OPEN) {
+    if (
+      clientData.session !== ws &&
+      clientData.session.readyState === WebSocket.OPEN
+    ) {
       console.log(`send join message to ${client.clientId}`);
       clientData.session.send(
         JSON.stringify({
@@ -159,7 +183,11 @@ function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<Serv
   });
 }
 
-function handleLeave(room: Room, client: TransferClient, ws: ServerWebSocket<ServerWebSocketData>) {
+function handleLeave(
+  room: Room,
+  client: TransferClient,
+  ws: ServerWebSocket<ServerWebSocketData>
+) {
   if (!room) return;
   room.clients.delete(client.clientId);
   console.log(`client ${client.clientId} left`);
@@ -177,7 +205,11 @@ function handleLeave(room: Room, client: TransferClient, ws: ServerWebSocket<Ser
   ws.close();
 }
 
-function handleMessage(room: Room, data: ClientSignal, ws: ServerWebSocket<ServerWebSocketData>) {
+function handleMessage(
+  room: Room,
+  data: ClientSignal,
+  ws: ServerWebSocket<ServerWebSocketData>
+) {
   const targetClientData = room?.clients.get(data.targetClientId);
   if (
     targetClientData &&
@@ -204,7 +236,10 @@ function startHeartbeat() {
       room.clients.forEach((clientData, clientId) => {
         if (clientData.session.readyState === WebSocket.OPEN) {
           if (now - clientData.lastPongTime > PONG_TIMEOUT) {
-            logger.warn({ clientId, roomId }, "Client timed out, closing connection");
+            logger.warn(
+              { clientId, roomId },
+              "Client timed out, closing connection"
+            );
             clientData.session.close();
           } else {
             clientData.session.send(JSON.stringify({ type: "ping" }));
@@ -216,9 +251,8 @@ function startHeartbeat() {
 }
 
 logger.info({ port: server.port }, "WebSocket server started");
-startHeartbeat(); // 启动心跳检测
+startHeartbeat();
 
-// 优雅关闭
 process.on("SIGINT", () => {
   logger.info("Shutting down server...");
   server.stop();
