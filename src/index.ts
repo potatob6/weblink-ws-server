@@ -41,9 +41,11 @@ const server = Bun.serve<ServerWebSocketData>({
     const roomId = url.searchParams.get("room") || "";
     const passwordHash = url.searchParams.get("pwd") || "";
 
-    if (server.upgrade(req, {
-      data: { roomId, passwordHash, clientId: null },
-    })) {
+    if (
+      server.upgrade(req, {
+        data: { roomId, passwordHash, clientId: null },
+      })
+    ) {
       return;
     }
 
@@ -124,6 +126,7 @@ const server = Bun.serve<ServerWebSocketData>({
       }
 
       room.clients.delete(clientData.client.clientId);
+      logger.info({ roomId: ws.data.roomId }, "Client disconnected");
 
       room.clients.forEach((clientData, clientId) => {
         if (
@@ -139,7 +142,11 @@ const server = Bun.serve<ServerWebSocketData>({
           );
         }
       });
-      ws.close();
+
+      if (room.clients.size === 0) {
+        rooms.delete(ws.data.roomId);
+        logger.info({ roomId: ws.data.roomId }, "Room deleted");
+      }
     },
   },
 });
@@ -202,7 +209,11 @@ function handleLeave(
       );
     }
   });
-  ws.close();
+
+  if (room.clients.size === 0) {
+    rooms.delete(ws.data.roomId);
+    logger.info({ roomId: ws.data.roomId }, "Room deleted");
+  }
 }
 
 function handleMessage(
@@ -227,8 +238,10 @@ function handleMessage(
 }
 
 function startHeartbeat() {
-  const HEARTBEAT_INTERVAL = 10000;
-  const PONG_TIMEOUT = 30000;
+  const HEARTBEAT_INTERVAL = parseInt(
+    process.env["HEARTBEAT_INTERVAL"] || "10000"
+  );
+  const PONG_TIMEOUT = parseInt(process.env["PONG_TIMEOUT"] || "30000");
 
   setInterval(() => {
     const now = Date.now();
