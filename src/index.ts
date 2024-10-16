@@ -20,7 +20,8 @@ interface ClientData {
   client: TransferClient;
   session: ServerWebSocket<ServerWebSocketData>;
   lastPongTime: number;
-  disconnectTimeout: Timer | null; // 新增断开等待超时
+  disconnectTimeout: Timer | null;
+  messageCache: RawSignal[];
 }
 
 interface Room {
@@ -122,7 +123,6 @@ function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<Serv
   ws.data.clientId = client.clientId;
 
   if (existingClient) {
-    // 如果客户端存在且有断开等待超时,取消超时并更新会话
     if (existingClient.disconnectTimeout) {
       clearTimeout(existingClient.disconnectTimeout);
       existingClient.disconnectTimeout = null;
@@ -130,6 +130,13 @@ function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<Serv
     existingClient.session = ws;
     existingClient.lastPongTime = Date.now();
     logger.info({ clientId: client.clientId, name: client.name }, "Client reconnected");
+
+    // 发送缓存的消息
+    existingClient.messageCache.forEach((message) => {
+      ws.send(JSON.stringify(message));
+    });
+    existingClient.messageCache = [];
+
     return;
   }
 
@@ -162,6 +169,7 @@ function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<Serv
     session: ws,
     lastPongTime: Date.now(),
     disconnectTimeout: null,
+    messageCache: [],
   });
 }
 
@@ -182,19 +190,20 @@ function handleLeave(room: Room, client: TransferClient, ws: ServerWebSocket<Ser
   room.clients.delete(client.clientId);
   logger.info({ clientId: client.clientId, name: client.name }, "Client left");
 
-  // send leave message to other clients
   room.clients.forEach((targetClientData, targetClientId) => {
+    const leaveMessage = {
+      type: "leave",
+      data: client,
+    };
+
     if (targetClientData.session.readyState === WebSocket.OPEN) {
-      targetClientData.session.send(
-        JSON.stringify({
-          type: "leave",
-          data: client,
-        })
-      );
+      targetClientData.session.send(JSON.stringify(leaveMessage));
       logger.info(
         { targetClientId, targetName: targetClientData.client.name },
         "Send leave message"
       );
+    } else {
+      targetClientData.messageCache.push(leaveMessage);
     }
   });
 
@@ -230,16 +239,17 @@ function handleClose(ws: ServerWebSocket<ServerWebSocketData>) {
       "Client disconnected"
     );
 
-    // send leave message to other clients
     room.clients.forEach((targetClientData, clientId) => {
+      const leaveMessage = {
+        type: "leave",
+        data: clientData.client,
+      };
+
       if (targetClientData.session.readyState === WebSocket.OPEN) {
-        targetClientData.session.send(
-          JSON.stringify({
-            type: "leave",
-            data: clientData.client,
-          })
-        );
+        targetClientData.session.send(JSON.stringify(leaveMessage));
         logger.info({ clientId, name: targetClientData.client.name }, `send leave message`);
+      } else {
+        targetClientData.messageCache.push(leaveMessage);
       }
     });
 
@@ -281,8 +291,8 @@ function handleMessage(room: Room, data: ClientSignal, ws: ServerWebSocket<Serve
 }
 
 function startHeartbeat() {
-  const HEARTBEAT_INTERVAL = parseInt(process.env["HEARTBEAT_INTERVAL"] || "10000");
-  const PONG_TIMEOUT = parseInt(process.env["PONG_TIMEOUT"] || "30000");
+  const HEARTBEAT_INTERVAL = parseInt(process.env["HEARTBEAT_INTERVAL"] || "30000");
+  const PONG_TIMEOUT = parseInt(process.env["PONG_TIMEOUT"] || "60000");
 
   setInterval(() => {
     const now = Date.now();
