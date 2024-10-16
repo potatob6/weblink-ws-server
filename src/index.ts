@@ -272,8 +272,8 @@ function handleMessage(room: Room, data: ClientSignal, ws: ServerWebSocket<Serve
 }
 
 function startHeartbeat() {
-  const HEARTBEAT_INTERVAL = parseInt(process.env["HEARTBEAT_INTERVAL"] || "30000");
-  const PONG_TIMEOUT = parseInt(process.env["PONG_TIMEOUT"] || "60000");
+  const HEARTBEAT_INTERVAL = parseInt(process.env["HEARTBEAT_INTERVAL"] || "10000");
+  const PONG_TIMEOUT = parseInt(process.env["PONG_TIMEOUT"] || "30000");
 
   setInterval(() => {
     const now = Date.now();
