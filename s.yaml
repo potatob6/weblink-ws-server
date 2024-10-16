@@ -2,7 +2,7 @@ edition: 3.0.0
 name: webrtc-ws-signaling-server
 access: "undefined"
 vars:
-  region: "cn-hangzhou"
+  region: "cn-hongkong"
   functionName: "webrtc-signaling-function"
 resources:
   start_server:
