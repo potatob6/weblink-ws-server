@@ -98,9 +98,6 @@ const server = Bun.serve<ServerWebSocketData>({
           case "join":
             handleJoin(room, signal.data as TransferClient, ws);
             break;
-          case "leave":
-            handleLeave(room, signal.data as TransferClient, ws);
-            break;
           case "message":
             handleMessage(room, signal.data as ClientSignal, ws);
             break;
@@ -121,24 +118,30 @@ const server = Bun.serve<ServerWebSocketData>({
 
       const clientData = room.clients.get(ws.data.clientId || "");
       if (!clientData) {
-        logger.warn({ roomId: ws.data.roomId }, "Client not found");
+        logger.warn({ clientId: ws.data.clientId }, "Client not found");
         return;
       }
 
       room.clients.delete(clientData.client.clientId);
-      logger.info({ roomId: ws.data.roomId }, "Client disconnected");
+      logger.info(
+        { name: clientData.client.name, clientId: clientData.client.clientId },
+        "Client disconnected"
+      );
 
-      room.clients.forEach((clientData, clientId) => {
+      room.clients.forEach((targetClientData, clientId) => {
         if (
-          clientData.session !== ws &&
-          clientData.session.readyState === WebSocket.OPEN
+          targetClientData.session !== ws &&
+          targetClientData.session.readyState === WebSocket.OPEN
         ) {
-          logger.info({ clientId }, `send leave message`);
-          clientData.session.send(
+          targetClientData.session.send(
             JSON.stringify({
               type: "leave",
               data: clientData.client,
             })
+          );
+          logger.info(
+            { clientId, name: targetClientData.client.name },
+            `send leave message`
           );
         }
       });
@@ -190,49 +193,36 @@ function handleJoin(
   });
 }
 
-function handleLeave(
-  room: Room,
-  client: TransferClient,
-  ws: ServerWebSocket<ServerWebSocketData>
-) {
-  if (!room) return;
-  room.clients.delete(client.clientId);
-  console.log(`client ${client.clientId} left`);
-  room.clients.forEach((clientData) => {
-    if (clientData.session.readyState === WebSocket.OPEN) {
-      console.log(`send leave message to ${client.clientId}`);
-      clientData.session.send(
-        JSON.stringify({
-          type: "leave",
-          data: client,
-        })
-      );
-    }
-  });
-
-  if (room.clients.size === 0) {
-    rooms.delete(ws.data.roomId);
-    logger.info({ roomId: ws.data.roomId }, "Room deleted");
-  }
-}
-
 function handleMessage(
   room: Room,
   data: ClientSignal,
   ws: ServerWebSocket<ServerWebSocketData>
 ) {
   const targetClientData = room?.clients.get(data.targetClientId);
+  const clientData = room?.clients.get(ws.data.clientId || "");
+  if (!clientData) {
+    logger.warn({ clientId: ws.data.clientId }, "Can't find client, skip message");
+    return;
+  }
   if (
     targetClientData &&
     targetClientData.session !== ws &&
     targetClientData.session.readyState === WebSocket.OPEN
   ) {
-    console.log(`send message to ${data.targetClientId}`);
     targetClientData.session.send(
       JSON.stringify({
         type: "message",
         data: data,
       })
+    );
+    logger.debug(
+      {
+        clientId: ws.data.clientId,
+        clientName: clientData.client.name,
+        targetClientId: data.targetClientId,
+        targetClientName: targetClientData.client.name,
+      },
+      "send message to client"
     );
   }
 }
