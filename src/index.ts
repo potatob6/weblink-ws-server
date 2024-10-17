@@ -232,7 +232,6 @@ function handleClose(ws: ServerWebSocket<ServerWebSocketData>) {
     return;
   }
 
-  // 使用导入的 DISCONNECT_TIMEOUT
   clientData.disconnectTimeout = setTimeout(() => {
     handleLeave(room, clientData.client, clientData.session);
   }, DISCONNECT_TIMEOUT);
@@ -269,7 +268,6 @@ function handleMessage(room: Room, data: ClientSignal, ws: ServerWebSocket<Serve
 }
 
 function startHeartbeat() {
-  // 使用导入的 HEARTBEAT_INTERVAL 和 PONG_TIMEOUT
   setInterval(() => {
     const now = Date.now();
     rooms.forEach((room, roomId) => {
