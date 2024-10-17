@@ -1,8 +1,7 @@
 import type { ServerWebSocket } from "bun";
 import type { ClientID, ClientSignal, RawSignal, TransferClient } from "./types";
 import pino from "pino";
-
-const LOG_LEVEL = process.env["LOG_LEVEL"] || "info";
+import { LOG_LEVEL, PORT, HEARTBEAT_INTERVAL, PONG_TIMEOUT, DISCONNECT_TIMEOUT } from "./var";
 
 const logger = pino({
   level: LOG_LEVEL,
@@ -32,7 +31,7 @@ interface Room {
 const rooms: Map<string, Room> = new Map();
 
 const server = Bun.serve<ServerWebSocketData>({
-  port: 3000,
+  port: PORT,
   fetch(req, server) {
     const url = new URL(req.url);
     const roomId = url.searchParams.get("room") || "";
@@ -233,9 +232,7 @@ function handleClose(ws: ServerWebSocket<ServerWebSocketData>) {
     return;
   }
 
-  const DISCONNECT_TIMEOUT = parseInt(process.env["DISCONNECT_TIMEOUT"] || "30000");
-
-  // set disconnect timeout
+  // 使用导入的 DISCONNECT_TIMEOUT
   clientData.disconnectTimeout = setTimeout(() => {
     handleLeave(room, clientData.client, clientData.session);
   }, DISCONNECT_TIMEOUT);
@@ -272,9 +269,7 @@ function handleMessage(room: Room, data: ClientSignal, ws: ServerWebSocket<Serve
 }
 
 function startHeartbeat() {
-  const HEARTBEAT_INTERVAL = parseInt(process.env["HEARTBEAT_INTERVAL"] || "10000");
-  const PONG_TIMEOUT = parseInt(process.env["PONG_TIMEOUT"] || "30000");
-
+  // 使用导入的 HEARTBEAT_INTERVAL 和 PONG_TIMEOUT
   setInterval(() => {
     const now = Date.now();
     rooms.forEach((room, roomId) => {
