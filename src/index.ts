@@ -163,6 +163,25 @@ function handleJoin(
     } else {
       // if client is not resuming
       room.clients.delete(client.clientId);
+      room.clients.forEach((clientData) => {
+        if (clientData.session === ws) return;
+        const leaveMessage: RawSignal = {
+          type: "leave",
+          data: client,
+        };
+        if (clientData.session.readyState === WebSocket.OPEN) {
+          clientData.session.send(JSON.stringify(leaveMessage));
+          logger.info(
+            {
+              clientId: clientData.client.clientId,
+              name: clientData.client.name,
+            },
+            "send leave message to client"
+          );
+        } else {
+          clientData.messageCache.push(leaveMessage);
+        }
+      });
     }
   }
 
