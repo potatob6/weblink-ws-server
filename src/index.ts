@@ -1,7 +1,18 @@
 import type { ServerWebSocket } from "bun";
-import type { ClientID, ClientSignal, RawSignal, TransferClient } from "./types";
+import type {
+  ClientID,
+  ClientSignal,
+  RawSignal,
+  TransferClient,
+} from "./types";
 import pino from "pino";
-import { LOG_LEVEL, PORT, HEARTBEAT_INTERVAL, PONG_TIMEOUT, DISCONNECT_TIMEOUT } from "./var";
+import {
+  LOG_LEVEL,
+  PORT,
+  HEARTBEAT_INTERVAL,
+  PONG_TIMEOUT,
+  DISCONNECT_TIMEOUT,
+} from "./var";
 
 const logger = pino({
   level: LOG_LEVEL,
@@ -50,7 +61,10 @@ const server = Bun.serve<ServerWebSocketData>({
   websocket: {
     open(ws) {
       const { roomId, passwordHash } = ws.data;
-      logger.info({ remoteAddress: ws.remoteAddress, roomId }, "New connection");
+      logger.info(
+        { remoteAddress: ws.remoteAddress, roomId },
+        "New connection"
+      );
 
       let room: Room | undefined = rooms.get(roomId);
       if (!room) {
@@ -111,7 +125,11 @@ const server = Bun.serve<ServerWebSocketData>({
   },
 });
 
-function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<ServerWebSocketData>) {
+function handleJoin(
+  room: Room,
+  client: TransferClient,
+  ws: ServerWebSocket<ServerWebSocketData>
+) {
   if (!room) {
     logger.warn({ roomId: ws.data.roomId }, "Room not found");
     return;
@@ -122,21 +140,30 @@ function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<Serv
   ws.data.clientId = client.clientId;
 
   if (existingClient) {
-    if (existingClient.disconnectTimeout) {
-      clearTimeout(existingClient.disconnectTimeout);
-      existingClient.disconnectTimeout = null;
+    // if client is resuming, reconnect
+    if (client.resume) {
+      if (existingClient.disconnectTimeout) {
+        clearTimeout(existingClient.disconnectTimeout);
+        existingClient.disconnectTimeout = null;
+      }
+      existingClient.session = ws;
+      existingClient.lastPongTime = Date.now();
+      logger.info(
+        { clientId: client.clientId, name: client.name },
+        "Client reconnected"
+      );
+
+      // send cached messages
+      existingClient.messageCache.forEach((message) => {
+        ws.send(JSON.stringify(message));
+      });
+      existingClient.messageCache = [];
+
+      return;
+    } else {
+      // if client is not resuming
+      room.clients.delete(client.clientId);
     }
-    existingClient.session = ws;
-    existingClient.lastPongTime = Date.now();
-    logger.info({ clientId: client.clientId, name: client.name }, "Client reconnected");
-
-    // send cached messages
-    existingClient.messageCache.forEach((message) => {
-      ws.send(JSON.stringify(message));
-    });
-    existingClient.messageCache = [];
-
-    return;
   }
 
   // send join message to new client
@@ -176,7 +203,11 @@ function handleJoin(room: Room, client: TransferClient, ws: ServerWebSocket<Serv
   });
 }
 
-function handleLeave(room: Room, client: TransferClient, ws: ServerWebSocket<ServerWebSocketData>) {
+function handleLeave(
+  room: Room,
+  client: TransferClient,
+  ws: ServerWebSocket<ServerWebSocketData>
+) {
   const clientData = room.clients.get(client.clientId);
   if (!clientData) {
     logger.warn({ clientId: client.clientId }, "Client not found");
@@ -237,11 +268,18 @@ function handleClose(ws: ServerWebSocket<ServerWebSocketData>) {
   }, DISCONNECT_TIMEOUT);
 }
 
-function handleMessage(room: Room, data: ClientSignal, ws: ServerWebSocket<ServerWebSocketData>) {
+function handleMessage(
+  room: Room,
+  data: ClientSignal,
+  ws: ServerWebSocket<ServerWebSocketData>
+) {
   const targetClientData = room?.clients.get(data.targetClientId);
   const clientData = room?.clients.get(ws.data.clientId || "");
   if (!clientData) {
-    logger.warn({ clientId: ws.data.clientId }, "Can't find client, skip message");
+    logger.warn(
+      { clientId: ws.data.clientId },
+      "Can't find client, skip message"
+    );
     return;
   }
   if (
@@ -274,7 +312,10 @@ function startHeartbeat() {
       room.clients.forEach((clientData, clientId) => {
         if (clientData.session.readyState === WebSocket.OPEN) {
           if (now - clientData.lastPongTime > PONG_TIMEOUT) {
-            logger.warn({ clientId, roomId }, "Client timed out, closing connection");
+            logger.warn(
+              { clientId, roomId },
+              "Client timed out, closing connection"
+            );
             clientData.session.close();
           } else {
             clientData.session.send(JSON.stringify({ type: "ping" }));

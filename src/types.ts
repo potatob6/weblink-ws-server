@@ -6,7 +6,10 @@ export interface Client {
   name: string;
   avatar: string | null;
 }
-export type TransferClient = Client & { createdAt: number };
+export type TransferClient = Client & {
+  createdAt: number;
+  resume?: boolean;
+};
 
 export interface RawSignal {
   type: string;
