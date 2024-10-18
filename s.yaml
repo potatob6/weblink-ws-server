@@ -16,8 +16,8 @@ resources:
       description: Serverless Devs WebRTC Signaling Server
       runtime: custom.debian10
       timeout: 3600
-      cpu: 1
-      memorySize: 2048
+      cpu: 0.1
+      memorySize: 128
       diskSize: 512
       instanceConcurrency: 100
       layers:
