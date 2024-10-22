@@ -452,6 +452,8 @@ startHeartbeat();
 process.on("SIGINT", () => {
   logger.info("Shutting down server...");
   server.stop();
+  redisPub?.quit();
+  redisSub?.quit();
   logger.info("Server closed");
   process.exit(0);
 });
