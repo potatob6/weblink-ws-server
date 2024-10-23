@@ -221,9 +221,12 @@ function handleWSClose(ws: ServerWebSocket<ServerWebSocketData>) {
     return;
   }
 
-  clientData.disconnectTimeout = setTimeout(() => {
-    handleClientLeave(room, clientData.client, clientData.session);
-  }, DISCONNECT_TIMEOUT);
+  // set disconnect timeout
+  if (!clientData.disconnectTimeout) {
+    clientData.disconnectTimeout = setTimeout(() => {
+      handleClientLeave(room, clientData.client, clientData.session);
+    }, DISCONNECT_TIMEOUT);
+  }
 }
 
 function handleClientJoin(
