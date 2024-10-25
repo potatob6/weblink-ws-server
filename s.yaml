@@ -14,7 +14,7 @@ resources:
     props:
       region: ${vars.region}
       description: Serverless Devs WebRTC Signaling Server
-      runtime: nodejs20
+      runtime: custom.debian10
       timeout: 3600
       cpu: 0.05
       memorySize: 128
