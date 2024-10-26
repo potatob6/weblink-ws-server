@@ -31,6 +31,18 @@ resources:
           - run
           - start
         port: 9000
+      provisionConfig:
+        qualifier: LATEST # 指定版本号或别名
+        target: 1 # 指定预留实例的数量
+      instanceLifecycleConfig:
+        instanceHealthCheckConfig:
+          type: http
+          protocol: http
+          path: /healthcheck
+          timeout: 10
+          interval: 5
+          healthyThreshold: 2
+          unhealthyThreshold: 2
       functionName: ${vars.functionName}
       code: .
       triggers:
@@ -43,17 +55,6 @@ resources:
               - PUT
               - DELETE
             authType: anonymous
-      provisionConfig:
-        provisionedConcurrency: 1
-      instanceLifecycleConfig:
-        instanceHealthCheckConfig:
-          type: http
-          protocol: http
-          path: /healthcheck
-          timeout: 10
-          interval: 5
-          healthyThreshold: 2
-          unhealthyThreshold: 2
   fc3_domain_0:
     component: fc3-domain
     props:
