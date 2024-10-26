@@ -115,6 +115,13 @@ const server = Bun.serve<ServerWebSocketData>({
     const roomId = url.searchParams.get("room") || "";
     const passwordHash = url.searchParams.get("pwd") || "";
 
+    if (url.pathname.startsWith("/healthcheck")) {
+      return new Response(undefined, {
+        status: 200,
+        statusText: "OK",
+      });
+    }
+
     if (
       server.upgrade(req, {
         data: { roomId, passwordHash, clientId: null },
@@ -123,7 +130,7 @@ const server = Bun.serve<ServerWebSocketData>({
       return;
     }
 
-    return new Response(undefined, { status: 404 });
+    return new Response(undefined, { status: 400, statusText: "Bad Request" });
   },
   websocket: {
     open(ws) {

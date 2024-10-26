@@ -30,7 +30,7 @@ resources:
           - npm
           - run
           - start
-        port: 3000
+        port: 9000
       functionName: ${vars.functionName}
       code: .
       triggers:
