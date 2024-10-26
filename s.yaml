@@ -43,6 +43,17 @@ resources:
               - PUT
               - DELETE
             authType: anonymous
+      provisionConfig:
+        provisionedConcurrency: 1
+      instanceLifecycleConfig:
+        instanceHealthCheckConfig:
+          type: http
+          protocol: http
+          path: /healthcheck
+          timeout: 10
+          interval: 5
+          healthyThreshold: 2
+          unhealthyThreshold: 2
   fc3_domain_0:
     component: fc3-domain
     props:
