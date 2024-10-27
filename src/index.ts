@@ -400,8 +400,6 @@ function handleClientMessage(
         },
         "send message to client"
       );
-    } else {
-      targetClientData.messageCache.push(data);
     }
   } else {
     // local client message, publish to redis
