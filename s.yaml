@@ -16,7 +16,7 @@ resources:
       description: Serverless Devs WebRTC Signaling Server
       runtime: custom.debian10
       timeout: 3600
-      cpu: 0.05
+      cpu: 0.1
       memorySize: 128
       diskSize: 512
       instanceConcurrency: 100
@@ -32,8 +32,9 @@ resources:
           - start
         port: 9000
       provisionConfig:
-        qualifier: LATEST # 指定版本号或别名
-        target: 1 # 指定预留实例的数量
+        qualifier: LATEST
+        target: 1
+        
       instanceLifecycleConfig:
         instanceHealthCheckConfig:
           type: http
