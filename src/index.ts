@@ -8,6 +8,10 @@ import {
   REDIS_URL,
   ALLOWED_ORIGINS,
   HOSTNAME,
+  TLS_CA_FILES,
+  TLS_KEY_FILE,
+  TLS_CERT_FILE,
+  TLS_ENABLED,
 } from "./var";
 import os from "os";
 import Redis from "ioredis";
@@ -119,6 +123,13 @@ redisSub?.on("message", (channel, message) => {
 const server = Bun.serve<ServerWebSocketData>({
   port: PORT,
   hostname: HOSTNAME,
+  tls: TLS_ENABLED
+    ? {
+        cert: Bun.file(TLS_CERT_FILE!),
+        key: Bun.file(TLS_KEY_FILE!),
+        ca: TLS_CA_FILES?.map((ca) => Bun.file(ca)) ?? [],
+      }
+    : undefined,
   fetch(req, server) {
     const url = new URL(req.url);
     const roomId = url.searchParams.get("room") || "";
