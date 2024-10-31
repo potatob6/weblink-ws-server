@@ -13,12 +13,10 @@ RUN cd /temp/prod && bun install --frozen-lockfile --production
 FROM base AS prerelease
 COPY --from=install /temp/prod/node_modules node_modules
 COPY . .
-
 RUN bun run build
 
 # copy production dependencies and source code into final image
 FROM base AS release
-COPY --from=install /temp/prod/node_modules node_modules
 COPY --from=prerelease /usr/app/dist/index.js .
 COPY --from=prerelease /usr/app/package.json .
 
