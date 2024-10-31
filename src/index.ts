@@ -229,7 +229,6 @@ function handleWSClose(ws: ServerWebSocket<ServerWebSocketData>) {
 
   const clientData = room.clients.get(ws.data.clientId || "");
   if (!clientData) {
-    logger.warn({ clientId: ws.data.clientId }, "Client not found");
     return;
   }
 
