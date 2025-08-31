@@ -21,8 +21,11 @@ jobs:
     - name: Installing bun
       run: npm install -g bun
 
-    - name: build
+    - name: Installing deps
       run: bun install --frozen-lockfile --production
+
+    - name: build
+      run: bun run build
 
     - name: upload
       uses: actions/upload-artifact@v4
